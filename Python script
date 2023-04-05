@@ -1,0 +1,124 @@
+importing libraries:
+
+import numpy as np
+import pandas as pd
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from mpl_toolkits.mplot3d import Axes3D
+%matplotlib inline
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.model_selection import GridSearchCV, cross_val_score
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.cluster import KMeans
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
+
+import xgboost as xgb
+
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.callbacks import EarlyStopping
+
+reading the csv file:
+
+df_train=pd.read_csv('C:/Users/fatem/anaconda3/data_set_ALL_AML_train.csv')
+df_test=pd.read_csv('C:/Users/fatem/anaconda3/data_set_ALL_AML_independent.csv')
+
+checking to see if data is imbalanced or not:
+
+y['cancer'].value_counts()
+
+data cleaning steps:
+
+df_train['cancer']=df_train['cancer'].map({'ALL':0,'AML':1})
+train_to_keep=[col for col in df_train.columns if 'call' not in col]
+test_to_keep=[col for col in df_test.columns if 'call' not in col]
+
+reindexing and organizing the column names:
+
+X_train_colnames=['Gene Description', 'Gene Accession Number', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+       '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', 
+       '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38']
+X_train=X_train.reindex(columns=X_train_colnames)
+
+X_test_colnames=['Gene Description', 'Gene Accession Number','39', '40', '41', '42', '43', '44', '45', '46',
+       '47', '48', '49', '50', '51', '52', '53',  '54', '55', '56', '57', '58', '59',
+       '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72']
+X_test=X_test.reindex(columns=X_test_colnames)
+
+transpose feature vector:
+
+X_train_new=X_train.T
+X_test_new=X_test.T
+
+X_train_new.columns=X_train_new.iloc[1]
+X_train_new=X_train_new.drop(['Gene Description','Gene Accession Number']).apply(pd.to_numeric)
+X_test_new.columns=X_test_new.iloc[1]
+X_test_new=X_test_new.drop(['Gene Description','Gene Accession Number']).apply(pd.to_numeric)
+
+X_train_new=X_train_new.reset_index(drop=True)
+X_test_new=X_test_new.reset_index(drop=True)
+
+y_train=y[y.patient <= 38].reset_index(drop=True)
+X_test_new=X_test_new.reset_index(drop=True)
+y_test=y[y.patient > 38].reset_index(drop=True)
+
+X_train_new=X_train_new.astype(float,64)
+X_test_new=X_test_new.astype(float,64)
+
+StSc=StandardScaler()                           #scaling the dataset
+X_train_new=StSc.fit_transform(X_train_new)
+X_test_new=StSc.transform(X_test_new)
+
+applying PCA to reduce the independent variables dimension:
+
+pca=PCA()
+pca.fit(X_train_new)
+total = sum(pca.explained_variance_)
+k = 0
+current_variance = 0
+while current_variance/total < 0.90:
+    current_variance += pca.explained_variance_[k]
+    k = k + 1
+    
+print(k, " features explain around 90% of the variance. From 7129 features to ", k, ", not too bad.", sep='')
+
+time to train the data:
+
+k-means clustering:
+
+km=KMeans(n_clusters=2,random_state=42)
+km.fit(X_train_new)
+y_test_pred_km=km.predict(X_test_new)
+print(accuracy_score(y_test_pred_km,y_test.iloc[:,1]))
+cm_km=confusion_matrix(y_test_pred_km,y_test.iloc[:,1])      #using confusion matrix to evaulate performance
+
+gaussian naive bayes:
+
+nb=GaussianNB()
+nb.fit(X_train_new,y_train.iloc[:,1])
+y_test_pred_nb=nb.predict(X_test_new)
+print(accuracy_score(y_test.iloc[:,1],y_test_pred_nb))
+sns.heatmap(confusion_matrix(y_test.iloc[:,1],y_test_pred_nb),annot=True)
+
+logistic regression:
+
+lg=LogisticRegression(solver='liblinear')
+parameters={"C":[1e-03, 1e-2, 1e-1, 1, 10], "penalty":["l1","l2"]}
+clf=GridSearchCV(lg,parameters,cv=3,scoring='accuracy')
+clf.fit(X_train_new,y_train.iloc[:,1])
+print(clf.best_params_)
+print(clf.best_estimator_)
+
+best_log=clf.best_estimator_
+y_test_pred_lg=best_log.predict(X_test_new)
+print(accuracy_score(y_test.iloc[:,1],y_test_pred_lg))
+sns.heatmap(confusion_matrix(y_test.iloc[:,1],y_test_pred_lg),annot=True)
+
+
+
